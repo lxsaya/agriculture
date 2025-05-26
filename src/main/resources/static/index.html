@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agriculture Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f7f8;
+            margin: 0; padding: 20px;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        section {
+            background: #fff;
+            padding: 15px 20px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 3px 8px rgb(0 0 0 / 0.1);
+        }
+        h2 {
+            margin-top: 0;
+            color: #2980b9;
+        }
+        ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        li {
+            padding: 8px 10px;
+            background: #ecf0f1;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        button {
+            background: #e74c3c;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #c0392b;
+        }
+        form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        input, select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #bdc3c7;
+            flex: 1;
+            min-width: 150px;
+        }
+        input[type="number"] {
+            max-width: 100px;
+        }
+        form > button {
+            flex: 0 0 auto;
+            background: #27ae60;
+        }
+        form > button:hover {
+            background: #1e8449;
+        }
+        .message {
+            margin-top: 10px;
+            color: green;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Управление сельским хозяйством</h1>
+
+<section id="workers-section">
+    <h2>Рабочие</h2>
+    <ul id="workers-list"></ul>
+    <form id="worker-form">
+        <input type="text" name="name" placeholder="Имя рабочего" required />
+        <button type="submit">Добавить рабочего</button>
+    </form>
+</section>
+
+<section id="plants-section">
+    <h2>Растения</h2>
+    <ul id="plants-list"></ul>
+    <form id="plant-form">
+        <input type="text" name="name" placeholder="Название растения" required />
+        <button type="submit">Добавить растение</button>
+    </form>
+</section>
+
+<section id="fields-section">
+    <h2>Поля</h2>
+    <ul id="fields-list"></ul>
+    <form id="field-form">
+        <input type="text" name="name" placeholder="Имя поля" required />
+        <input type="number" name="area" placeholder="Площадь" required step="0.01" />
+        <input type="text" name="soilType" placeholder="Тип почвы" required />
+        <button type="submit">Добавить поле</button>
+    </form>
+</section>
+
+<section id="sowinglogs-section">
+    <h2>Журнал посева</h2>
+    <ul id="sowinglogs-list"></ul>
+    <form id="sowinglog-form">
+        <select name="workerId" required></select>
+        <select name="plantId" required></select>
+        <select name="fieldId" required></select>
+        <input type="number" step="0.01" name="quantityKg" placeholder="Количество кг" required />
+        <button type="submit">Добавить запись</button>
+    </form>
+</section>
+
+<script>
+    const apiBase = 'http://localhost:8080/api';
+
+    // Универсальная функция fetch с обработкой JSON и ошибок
+    async function fetchJson(url, options = {}) {
+        const res = await fetch(url, options);
+        if (!res.ok) throw new Error(`Ошибка HTTP: ${res.status}`);
+        return res.json();
+    }
+
+    // --- РЕНДЕР СПИСКОВ ---
+
+    async function loadWorkers() {
+        try {
+            const workers = await fetchJson(`${apiBase}/workers`);
+            const ul = document.getElementById('workers-list');
+            ul.innerHTML = '';
+            workers.forEach(w => {
+                const li = document.createElement('li');
+                li.textContent = `${w.name} (${w.id})`;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Удалить';
+                delBtn.onclick = async () => {
+                    if(confirm(`Удалить рабочего ${w.name}?`)) {
+                        await fetch(`${apiBase}/workers/${w.id}`, { method: 'DELETE' });
+                        loadWorkers();
+                        loadSowingLogs(); // обновим журнал, чтобы убрать зависимости
+                    }
+                };
+                li.appendChild(delBtn);
+                ul.appendChild(li);
+            });
+            fillSelect('sowinglog-form', 'workerId', workers);
+        } catch(e) {
+            alert('Ошибка загрузки рабочих: ' + e.message);
+        }
+    }
+
+    async function loadPlants() {
+        try {
+            const plants = await fetchJson(`${apiBase}/plants`);
+            const ul = document.getElementById('plants-list');
+            ul.innerHTML = '';
+            plants.forEach(p => {
+                const li = document.createElement('li');
+                li.textContent = `${p.name} (${p.id})`;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Удалить';
+                delBtn.onclick = async () => {
+                    if(confirm(`Удалить растение ${p.name}?`)) {
+                        await fetch(`${apiBase}/plants/${p.id}`, { method: 'DELETE' });
+                        loadPlants();
+                        loadSowingLogs();
+                    }
+                };
+                li.appendChild(delBtn);
+                ul.appendChild(li);
+            });
+            fillSelect('sowinglog-form', 'plantId', plants);
+        } catch(e) {
+            alert('Ошибка загрузки растений: ' + e.message);
+        }
+    }
+
+    async function loadFields() {
+        try {
+            const fields = await fetchJson(`${apiBase}/fields`);
+            const ul = document.getElementById('fields-list');
+            ul.innerHTML = '';
+            fields.forEach(f => {
+                const li = document.createElement('li');
+                li.textContent = `${f.name} (${f.id}) — Площадь: ${f.area}, Почва: ${f.soilType}`;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Удалить';
+                delBtn.onclick = async () => {
+                    if(confirm(`Удалить поле ${f.name}?`)) {
+                        await fetch(`${apiBase}/fields/${f.id}`, { method: 'DELETE' });
+                        loadFields();
+                        loadSowingLogs();
+                    }
+                };
+                li.appendChild(delBtn);
+                ul.appendChild(li);
+            });
+            fillSelect('sowinglog-form', 'fieldId', fields);
+        } catch(e) {
+            alert('Ошибка загрузки полей: ' + e.message);
+        }
+    }
+
+    async function loadSowingLogs() {
+        try {
+            const logs = await fetchJson(`${apiBase}/sowing-logs`);
+            const ul = document.getElementById('sowinglogs-list');
+            ul.innerHTML = '';
+            logs.forEach(log => {
+                const li = document.createElement('li');
+                li.textContent = `Рабочий: ${log.worker.name}, Растение: ${log.plant.name}, Поле: ${log.field.name}, Кол-во: ${log.quantityKg} кг`;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Удалить';
+                delBtn.onclick = async () => {
+                    if(confirm(`Удалить запись посева?`)) {
+                        await fetch(`${apiBase}/sowing-logs/${log.id}`, { method: 'DELETE' });
+                        loadSowingLogs();
+                    }
+                };
+                li.appendChild(delBtn);
+                ul.appendChild(li);
+            });
+        } catch(e) {
+            alert('Ошибка загрузки журнала посева: ' + e.message);
+        }
+    }
+
+    // --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ЗАПОЛНЕНИЯ <select> в форме посева ---
+    function fillSelect(formId, selectName, items) {
+        const select = document.querySelector(`#${formId} select[name=${selectName}]`);
+        if (!select) return;
+        select.innerHTML = '';
+        items.forEach(i => {
+            const option = document.createElement('option');
+            option.value = i.id;
+            option.textContent = i.name;
+            select.appendChild(option);
+        });
+    }
+
+    // --- ОБРАБОТЧИКИ ФОРМ ---
+
+    document.getElementById('worker-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const name = e.target.name.value.trim();
+        if (!name) return alert('Введите имя рабочего');
+        try {
+            await fetch(`${apiBase}/workers`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name})
+            });
+            e.target.reset();
+            loadWorkers();
+        } catch(e) {
+            alert('Ошибка при добавлении рабочего: ' + e.message);
+        }
+    });
+
+    document.getElementById('plant-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const name = e.target.name.value.trim();
+        if (!name) return alert('Введите название растения');
+        try {
+            await fetch(`${apiBase}/plants`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name})
+            });
+            e.target.reset();
+            loadPlants();
+        } catch(e) {
+            alert('Ошибка при добавлении растения: ' + e.message);
+        }
+    });
+
+    document.getElementById('field-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const name = e.target.name.value.trim();
+        const area = parseFloat(e.target.area.value);
+        const soilType = e.target.soilType.value.trim();
+        if (!name || !area || !soilType) return alert('Заполните все поля');
+        try {
+            await fetch(`${apiBase}/fields`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, area, soilType})
+            });
+            e.target.reset();
+            loadFields();
+        } catch(e) {
+            alert('Ошибка при добавлении поля: ' + e.message);
+        }
+    });
+
+    document.getElementById('sowinglog-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const workerId = e.target.workerId.value;
+        const plantId = e.target.plantId.value;
+        const fieldId = e.target.fieldId.value;
+        const quantityKg = parseFloat(e.target.quantityKg.value);
+        if (!workerId || !plantId || !fieldId || !quantityKg) return alert('Заполните все поля');
+        try {
+            await fetch(`${apiBase}/sowing-logs`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({workerId, plantId, fieldId, quantityKg})
+            });
+            e.target.reset();
+            loadSowingLogs();
+        } catch(e) {
+            alert('Ошибка при добавлении записи журнала посева: ' + e.message);
+        }
+    });
+
+    loadWorkers();
+    loadPlants();
+    loadFields();
+    loadSowingLogs();
+</script>
+
+</body> </html>

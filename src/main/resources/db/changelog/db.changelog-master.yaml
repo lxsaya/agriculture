@@ -1,0 +1,4 @@
+databaseChangeLog:
+  - include:
+      # create schema and tables
+      file: db/changelog/v1_0/changelog-v1_0.yaml
